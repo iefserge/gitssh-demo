@@ -3,6 +3,7 @@ package main
 import (
 	"bufio"
 	"bytes"
+	"compress/flate"
 	"compress/zlib"
 	"crypto/sha1"
 	"encoding/binary"
@@ -78,6 +79,43 @@ func main() {
 		ssh.HostKeyFile("gitssh_host_key"), ssh.NoPty()))
 }
 
+// io.TeeReader does not implement ByteReader interface, which forces
+// zlib to allocate an internal bufio.Reader. This custom tee reader
+// implements both Reader() and ByteReader().
+type teeByteReader struct {
+	// Use flate.Reader here because this is the interface zlib
+	// decompressor requires to avoid creating additional bufio.Reader.
+	zlibInputReader flate.Reader
+	zlibSize        int64
+	teeWriter       io.Writer
+}
+
+func (zc *teeByteReader) Read(p []byte) (int, error) {
+	n, err := zc.zlibInputReader.Read(p)
+	zc.zlibSize += int64(n)
+	if zc.teeWriter != nil && n > 0 {
+		_, err = zc.teeWriter.Write(p[:n])
+		if err != nil {
+			return n, fmt.Errorf("zlib read tee error: %w", err)
+		}
+	}
+	return n, err
+}
+
+func (zc *teeByteReader) ReadByte() (byte, error) {
+	b, err := zc.zlibInputReader.ReadByte()
+	if err == nil {
+		zc.zlibSize++
+		if zc.teeWriter != nil {
+			_, err = zc.teeWriter.Write([]byte{b})
+			if err != nil {
+				return 0, fmt.Errorf("zlib readbyte tee error: %w", err)
+			}
+		}
+	}
+	return b, err
+}
+
 func writeObjects(w io.Writer, pack string, objects []githelpers.IdxObject) error {
 	f, err := os.Open(pack)
 	if err != nil {
@@ -92,12 +130,13 @@ func writeObjects(w io.Writer, pack string, objects []githelpers.IdxObject) erro
 		reader := bufio.NewReader(sectionReader)
 
 		// Read and copy object header.
-		if _, err := githelpers.CopyObjectHeader(reader, w); err != nil {
+		_, err := githelpers.CopyObjectHeader(reader, w)
+		if err != nil {
 			return fmt.Errorf("reading header: %w", err)
 		}
 
 		// Read and copy object body.
-		zlibReader, err := zlib.NewReader(io.TeeReader(reader, w))
+		zlibReader, err := zlib.NewReader(&teeByteReader{zlibInputReader: reader, teeWriter: w})
 		if err != nil {
 			return fmt.Errorf("creating zlib reader: %w", err)
 		}

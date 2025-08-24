@@ -3,10 +3,10 @@ package githelpers
 import (
 	"encoding/binary"
 	"encoding/hex"
-	"errors"
 	"fmt"
 	"iter"
 	"os"
+	"slices"
 	"strings"
 )
 
@@ -22,30 +22,28 @@ func Index(out *error) iter.Seq2[string, IdxObject] {
 			*out = fmt.Errorf("reading pack dir: %w", err)
 			return
 		}
-		for _, e := range entries {
-			if !strings.HasSuffix(e.Name(), ".idx") {
-				continue
-			}
-			// For each *.idx file, read all objects from it.
-			data, err := os.ReadFile(".git/objects/pack/" + e.Name())
-			if err != nil {
-				*out = errors.Join(*out, fmt.Errorf("reading idx file: %w", err))
-				continue
-			}
-			hashOffsets := 256*4 + 8
-			objectCount := int(binary.BigEndian.Uint32(data[hashOffsets-4 : hashOffsets]))
-			packOffsets := hashOffsets + objectCount*20 + objectCount*4
-			for i := range objectCount {
-				// Object hash.
-				hash := hex.EncodeToString(data[hashOffsets+i*20 : hashOffsets+(i+1)*20])
-				if !yield(hash, IdxObject{
-					// Idx file name.
-					Pack: ".git/objects/pack/" + strings.TrimSuffix(e.Name(), ".idx") + ".pack",
-					// Location of this object in *.pack file.
-					Offset: int(binary.BigEndian.Uint32(data[packOffsets+i*4 : packOffsets+(i+1)*4])),
-				}) {
-					return
-				}
+		fileIndex := slices.IndexFunc(entries, func(e os.DirEntry) bool { return strings.HasSuffix(e.Name(), ".idx") })
+		if fileIndex < 0 {
+			return
+		}
+		data, err := os.ReadFile(".git/objects/pack/" + entries[fileIndex].Name())
+		if err != nil {
+			*out = fmt.Errorf("reading idx file: %w", err)
+			return
+		}
+		hashOffsets := 256*4 + 8
+		objectCount := int(binary.BigEndian.Uint32(data[hashOffsets-4 : hashOffsets]))
+		packOffsets := hashOffsets + objectCount*20 + objectCount*4
+		for i := range objectCount {
+			// Object hash.
+			hash := hex.EncodeToString(data[hashOffsets+i*20 : hashOffsets+(i+1)*20])
+			if !yield(hash, IdxObject{
+				// Idx file name.
+				Pack: ".git/objects/pack/" + strings.TrimSuffix(entries[fileIndex].Name(), ".idx") + ".pack",
+				// Location of this object in *.pack file.
+				Offset: int(binary.BigEndian.Uint32(data[packOffsets+i*4 : packOffsets+(i+1)*4])),
+			}) {
+				return
 			}
 		}
 	}

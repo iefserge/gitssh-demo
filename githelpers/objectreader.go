@@ -22,6 +22,7 @@ type ObjectHeader struct {
 	ObjSize  int64
 	OfsDelta int64
 	RefDelta [20]byte
+	Length   int
 }
 
 func CopyObjectHeader(r io.ByteReader, teeWriter io.Writer) (*ObjectHeader, error) {
@@ -32,6 +33,7 @@ func CopyObjectHeader(r io.ByteReader, teeWriter io.Writer) (*ObjectHeader, erro
 	if _, err := teeWriter.Write([]byte{b}); err != nil {
 		return nil, fmt.Errorf("writing object type: %w", err)
 	}
+	length := 1
 	objType := ObjectType((int(b) >> 4) & 7)
 	objSize := int64(b & 15)
 	shift := 4
@@ -44,6 +46,7 @@ func CopyObjectHeader(r io.ByteReader, teeWriter io.Writer) (*ObjectHeader, erro
 			return nil, fmt.Errorf("writing object type: %w", err)
 		}
 		objSize += int64(b&0x7f) << shift
+		length++
 	}
 	res := ObjectHeader{
 		ObjType: objType,
@@ -51,10 +54,12 @@ func CopyObjectHeader(r io.ByteReader, teeWriter io.Writer) (*ObjectHeader, erro
 	}
 	switch objType {
 	case ObjectOfsDelta:
-		res.OfsDelta, _, err = readDeltaBaseOffset(r, teeWriter)
+		var deltaLen int
+		res.OfsDelta, deltaLen, err = readDeltaBaseOffset(r, teeWriter)
 		if err != nil {
 			return nil, fmt.Errorf("reading ofs delta: %w", err)
 		}
+		length += deltaLen
 	case ObjectRefDelta:
 		for i := range 20 {
 			b, err = r.ReadByte()
@@ -65,8 +70,10 @@ func CopyObjectHeader(r io.ByteReader, teeWriter io.Writer) (*ObjectHeader, erro
 				return nil, fmt.Errorf("writing object type: %w", err)
 			}
 			res.RefDelta[i] = b
+			length++
 		}
 	}
+	res.Length = length
 	return &res, nil
 }
 
