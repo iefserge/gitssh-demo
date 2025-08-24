@@ -11,7 +11,7 @@ It does not read full objects into memory, so this should well with pretty large
 Max supported packfile size is 2Gi.
 
 It should be relatively easy to extend it support multiple packfiles, but special
-case must be taken about duplicate objects. Here [OFS deltas](https://git-scm.com/docs/pack-format/2.31.0#_deltified_representation)
+care must be taken about duplicate objects. Here [OFS deltas](https://git-scm.com/docs/pack-format/2.31.0#_deltified_representation)
 add a bit more complexity, because skipping or adding objects requires OFS deltas to be rewritten accordingly.
 
 Additional logic can be added to filter and only send the requested objects, this requires
