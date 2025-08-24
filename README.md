@@ -66,15 +66,18 @@ git clone git@localhost:demo
 ## FAQ
 
 **Q: Can we stream the entire `*.pack` file to the client?**
+
 A: Yes, this should work if we only have one packfile, but would not help if we needed to extend this demo to support
 partial clones or multiple packfiles.
 
 **Q: Why does it need to decompress every object with zlib and then discards the result?**
+
 A: Git packfiles do not store information about the compressed size of the object in `*.pack` files. So decompression
 is necessary to find out how many bytes to send. `*.rev` reverse indexes indirectly contain this information and
 can be used as an alternative.
 
 **Q: Why are we reading the entire list of objects from the `*.idx` file?**
+
 A: This is done to make this demo simpler, and since we're sending all objects anyway. Real implementation would use
 binary search over the index table to select only the necessary objects.
 
