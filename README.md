@@ -1,3 +1,5 @@
+<img src="./logo.png" alt="Git Matrix Gopher" />
+
 # gitssh-demo
 
 Absolutely the simplest SSH server that implements basics of Git SSH protocol
@@ -20,6 +22,14 @@ refer to trees and blobs. Also, some objects are stored as deltas (i.e. diffs ba
 which also creates a dependency link.
 
 Git docs on file formats are [here](https://git-scm.com/docs/pack-format).
+
+<hr/>
+
+```
+gc25{XVqFlsmlZZnL}
+```
+
+<hr/>
 
 ## Limitations
 
